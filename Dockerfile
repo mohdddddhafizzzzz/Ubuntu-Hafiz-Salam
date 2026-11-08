@@ -1,11 +1,11 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Kuala_Lumpur
+ENV TZ=Asia/Jakarta
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server sudo curl wget git unzip ffmpeg python3 python3-pip \
-    neofetch tmux figlet tzdata nano vim htop net-tools iputils-ping \
+    neofetch tmux tzdata nano vim htop net-tools iputils-ping \
     ca-certificates gnupg build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/run/sshd
@@ -15,8 +15,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Claude Code
-RUN npm install -g @anthropic-ai/claude-code
+# Claude Code + Railway CLI (untuk auto TCP proxy port 22)
+RUN npm install -g @anthropic-ai/claude-code @railway/cli
 
 # Deno (dibutuhkan bot) + uv
 RUN curl -fsSL https://deno.land/install.sh | sh \

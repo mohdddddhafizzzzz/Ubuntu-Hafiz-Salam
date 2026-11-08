@@ -19,8 +19,10 @@ Ubuntu 22.04 + SSH di Railway, lengkap dengan banner login, Node.js 22, Python, 
 3. Tab **Variables**, tambahkan:
    - `ROOT_PASSWORD` : password login root
    - `SSH_PUBLIC_KEY` : (opsional) public key, lebih aman dari password
-4. **Settings → Networking → TCP Proxy**, tambahkan port `22`.
-5. Railway memberi alamat seperti `xxx.proxy.rlwy.net:12345`.
+4. **TCP Proxy port 22**, pilih salah satu:
+   - **Manual**: Settings → Networking → TCP Proxy → port `22`.
+   - **Auto**: tambah Variable `RAILWAY_API_TOKEN` (Account Settings → Tokens → Create Token). Container akan buat proxy port 22 sendiri saat start. Log ada di `/var/log/tcp-proxy.log`.
+5. Railway memberi alamat seperti `xxx.proxy.rlwy.net:12345` (lihat di Settings → Networking).
 
 ## Connect
 
@@ -40,17 +42,15 @@ ssh root@xxx.proxy.rlwy.net -p 12345
 
 ## Variables Opsional (Banner)
 
-Semua sudah ada default, isi hanya kalau mau ubah.
+Banner HAFIZ sudah auto. Isi hanya kalau mau ubah.
 
 | Variable | Default |
 |----------|---------|
-| `BANNER_TEXT` | `HAFIZ` |
-| `BANNER_SUBTITLE` | `SSH WORKSTATION2` |
-| `BANNER_FONT` | `small` (atau `big`, `block`) |
-| `BANNER_FOOTER` | `Managed by Hafiz` |
 | `HOST_LABEL` | `Hafiz Cloud Workstation2` |
 | `OWNER_NAME` | `Hafiz/Salam` |
 | `OWNER_TELEGRAM` | `@Vnrav` |
+
+Teks lain (HAFIZ, Support Me, dll) edit terus di `motd.sh`.
 
 ## Catatan
 
