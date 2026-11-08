@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Jakarta
+ENV TZ=Asia/Kuala_Lumpur
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server sudo curl wget git unzip ffmpeg python3 python3-pip \
