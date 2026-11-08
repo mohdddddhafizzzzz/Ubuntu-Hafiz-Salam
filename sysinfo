@@ -1,0 +1,27 @@
+#!/bin/bash
+# Menampilkan informasi sistem (dipakai juga oleh banner login)
+
+B='\033[94m'; C='\033[96m'; P='\033[92m'; N='\033[0m'
+
+row() { printf '• %-11s: %b%s%b\n' "$1" "$2" "$3" "$N"; }
+
+os=$(. /etc/os-release && echo "$PRETTY_NAME")
+node_v=$(node -v 2>/dev/null || echo "n/a")
+py_v=$(python3 -V 2>/dev/null | awk '{print $2}')
+ram=$(free -h | awk '/Mem:/{print $3" / "$2}')
+disk=$(df -h / | awk 'NR==2{print $3" / "$2}')
+
+printf '%bSYSTEM INFORMATION%b\n' "$B" "$N"
+row "Host"       "$C" "${HOST_LABEL:-Hafiz Cloud Workstation2}"
+row "OS"         "$C" "$os"
+row "Kernel"     "$C" "$(uname -r)"
+row "Arch"       "$C" "$(uname -m)"
+row "Region"     "$P" "${RAILWAY_REPLICA_REGION:-Unknown}"
+row "Timezone"   "$C" "$(date +'%Z (UTC%:z)')"
+row "Replica ID" "$C" "${RAILWAY_REPLICA_ID:-Unavailable}"
+row "Node.js"    "$C" "$node_v"
+row "Python"     "$C" "$py_v"
+row "RAM"        "$C" "$ram"
+row "Disk"       "$C" "$disk"
+row "Uptime"     "$C" "$(uptime -p)"
+row "Access"     "$B" "SSH / Railway TCP Proxy"
