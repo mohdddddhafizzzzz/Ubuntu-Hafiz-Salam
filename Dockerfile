@@ -12,7 +12,7 @@ ENV TZ=Asia/Jakarta
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server sudo curl wget git unzip ffmpeg python3 python3-pip \
-    neofetch tmux tzdata nano vim htop net-tools iputils-ping \
+    neofetch tmux procps tzdata nano vim htop net-tools iputils-ping \
     ca-certificates gnupg build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/run/sshd
@@ -55,6 +55,23 @@ region=$(cat "$cache" 2>/dev/null)
 [ -z "$region" ] && region="${RAILWAY_REPLICA_REGION:-Unknown}"
 
 os=$(. /etc/os-release && echo "$PRETTY_NAME")
+cpu=$(lscpu 2>/dev/null | awk -F: '/Model name/{gsub(/^[ \t]+/,"",$2); print $2; exit}')
+[ -z "$cpu" ] && cpu=$(awk -F: '/model name/{gsub(/^[ \t]+/,"",$2); print $2; exit}' /proc/cpuinfo)
+cpu=$(echo "${cpu:-Unknown}" | cut -c1-42)
+cores="$(nproc 2>/dev/null || echo '?') CPU(s)"
+ram=$(awk '/MemTotal/{t=$2}/MemAvailable/{a=$2}END{printf "%.1f / %.1f GB", (t-a)/1048576, t/1048576}' /proc/meminfo)
+disk=$(df -h / 2>/dev/null | awk 'NR==2{print $3" / "$2}')
+# Network: jumlah trafik semua interface (kecuali lo)
+net=$(tail -n +3 /proc/net/dev | sed 's/:/ /' | awk '
+  function h(b,  i,u){ split("B KB MB GB TB",u," "); i=1; while(b>=1024 && i<5){b/=1024;i++} return sprintf("%.1f %s",b,u[i]) }
+  $1!="lo"{rx+=$2; tx+=$10}
+  END{ printf "↓ %s / ↑ %s", h(rx), h(tx) }')
+# Internet: guna cache region kalau ada, kalau tidak test cepat
+if [ -s "$cache" ] || curl -fsS --max-time 2 -o /dev/null https://1.1.1.1 2>/dev/null; then
+  inet="Online"; inet_c="$G"
+else
+  inet="Offline"; inet_c="$Y"
+fi
 node_v=$(node -v 2>/dev/null || echo "n/a")
 py_v=$(python3 -V 2>/dev/null | awk '{print $2}')
 
@@ -63,6 +80,12 @@ row "Host"         "$B" "${HOST_LABEL:-Hafiz Cloud Workstation2}"
 row "OS"           "$C" "$os"
 row "Kernel"       "$C" "$(uname -r)"
 row "Architecture" "$C" "$(uname -m)"
+row "CPU"          "$C" "$cpu"
+row "Core"         "$C" "$cores"
+row "RAM"          "$C" "$ram"
+row "Disk"         "$C" "$disk"
+row "Network"      "$C" "$net"
+row "Internet"     "$inet_c" "$inet"
 row "Region"       "$G" "$region"
 row "Region ID"    "$G" "IP Geolocation"
 row "Timezone"     "$Y" "$(date +'%Z (UTC%:z)')"
@@ -73,6 +96,40 @@ row "Python"       "$C" "$py_v"
 row "Access"       "$B" "SSH / Railway TCP Proxy"
 EOF_FILE
 chmod 755 /usr/local/bin/sysinfo
+DOCKER_EOT
+
+# ---------- menu ----------
+RUN <<'DOCKER_EOT'
+set -e
+cat > /usr/local/bin/menu <<'EOF_FILE'
+#!/bin/bash
+# Menu pilihan cepat
+G='\033[92m'; B='\033[94m'; Y='\033[93m'; N='\033[0m'
+
+while true; do
+  printf '\n  %bMENU%b\n' "$Y" "$N"
+  printf '  %b1%b  Info sistem            (sysinfo)\n' "$B" "$N"
+  printf '  %b2%b  Cek lain-lain / bench  (bench.sh)\n' "$B" "$N"
+  printf '  %b3%b  Neofetch\n' "$B" "$N"
+  printf '  %b4%b  Monitor proses         (htop)\n' "$B" "$N"
+  printf '  %b5%b  Claude Code\n' "$B" "$N"
+  printf '  %b0%b  Keluar\n\n' "$B" "$N"
+  read -rp "  Pilih: " c
+  case "$c" in
+    1) sysinfo ;;
+    2)
+      read -rp "  bench.sh guna banyak trafik keluar. Teruskan? (y/N): " ok
+      [ "$ok" = "y" ] || [ "$ok" = "Y" ] && wget -qO- bench.sh | bash
+      ;;
+    3) neofetch ;;
+    4) htop ;;
+    5) claude ;;
+    0|q|Q) exit 0 ;;
+    *) printf '  %bPilihan tidak valid%b\n' "$G" "$N" ;;
+  esac
+done
+EOF_FILE
+chmod 755 /usr/local/bin/menu
 DOCKER_EOT
 
 # ---------- banner login ----------
@@ -122,6 +179,8 @@ printf '  %b%-11s%b%b%s%b\n' "$B" "cl"       "$N" "$G" "Start Claude Code"      
 printf '  %b%-11s%b%b%s%b\n' "$B" "projects" "$N" "$G" "Open project directory"   "$N"
 printf '  %b%-11s%b%b%s%b\n' "$B" "tmux"     "$N" "$G" "Manage terminal sessions" "$N"
 printf '  %b%-11s%b%b%s%b\n' "$B" "sysinfo"  "$N" "$G" "Show system information"  "$N"
+printf '  %b%-11s%b%b%s%b\n' "$B" "menu"     "$N" "$G" "Open menu"                "$N"
+printf '  %b%-11s%b%b%s%b\n' "$B" "bench"    "$N" "$G" "Cek lain-lain (bench.sh)" "$N"
 echo
 
 printf '  %bSUPPORT ME%b\n' "$Y" "$N"
@@ -144,9 +203,12 @@ cat > /entrypoint.sh <<'EOF_FILE'
 #!/bin/bash
 set -e
 
+# Auto buat ROOT_PASSWORD kalau tak diisi (password keluar di Deploy Logs)
 if [ -z "$ROOT_PASSWORD" ] && [ -z "$SSH_PUBLIC_KEY" ]; then
-  echo "ERROR: Set ROOT_PASSWORD atau SSH_PUBLIC_KEY di Railway Variables."
-  exit 1
+  ROOT_PASSWORD="Hfz$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 10)#"
+  echo "=============================================="
+  echo " ROOT_PASSWORD (auto): $ROOT_PASSWORD"
+  echo "=============================================="
 fi
 
 # Password root
@@ -192,7 +254,7 @@ DOCKER_EOT
 
 # Alias, folder projects, banner dari .bashrc, matikan mesej default Ubuntu
 RUN mkdir -p /root/projects \
-    && printf "alias cl='claude'\\nalias projects='cd ~/projects'\\n" >> /root/.bashrc \
+    && printf "alias cl='claude'\\nalias projects='cd ~/projects'\\nalias bench='wget -qO- bench.sh | bash'\\n" >> /root/.bashrc \
     && echo '[ -f /etc/profile.d/99-motd.sh ] && . /etc/profile.d/99-motd.sh' >> /root/.bashrc \
     && rm -f /etc/motd /etc/legal \
     && chmod -x /etc/update-motd.d/* 2>/dev/null || true \
@@ -203,6 +265,9 @@ RUN sed -i 's/#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
     && sed -i 's/#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
     && sed -i 's/#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
     && echo "PrintMotd no" >> /etc/ssh/sshd_config \
+    && echo "MaxAuthTries 3" >> /etc/ssh/sshd_config \
+    && echo "LoginGraceTime 20" >> /etc/ssh/sshd_config \
+    && echo "MaxStartups 5:30:10" >> /etc/ssh/sshd_config \
     && echo "ClientAliveInterval 60" >> /etc/ssh/sshd_config \
     && echo "ClientAliveCountMax 5" >> /etc/ssh/sshd_config
 
